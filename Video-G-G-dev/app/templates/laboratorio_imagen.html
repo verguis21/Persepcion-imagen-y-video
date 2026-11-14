@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Laboratorio Imagen · UPAO</title>
+  <link rel="stylesheet" href="/static/laboratorio_imagen.css">
+  <script src="/static/laboratorio_imagen.js" defer></script>
+</head>
+<body>
+  <header class="barra">
+    <div class="brand"><span class="marca">◈</span><span><strong>Prevención en escaleras</strong><small>UPAO · Laboratorio de Imagen</small></span></div>
+    <div class="estado"><span class="punto"></span> Imagen · servidor local 5051</div>
+  </header>
+  <main>
+    <div class="intro">
+      <div><p class="supra">ANÁLISIS VISUAL · PRUEBAS REALES</p><h1>Comparación de fotogramas</h1><p class="descripcion">Analiza fotos y clips de hasta 10,5 segundos: diagnóstico de calidad, detección de objetos, posturas y recuperación ROI. Los hallazgos proceden de tus modelos locales.</p></div>
+      <span class="nota">Evidencia visual · Sin confirmar caídas</span>
+    </div>
+    <section class="panel inputs">
+      <form id="formulario">
+        <label for="archivo">Fotografía / video de prueba</label>
+        <input type="file" id="archivo" name="archivo" accept="image/png,image/jpeg,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska" required>
+        <label for="modo">Preprocesamiento</label>
+        <select id="modo" name="modo"><option value="adaptativo">Adaptativo (recomendado)</option><option value="original">Original</option><option value="clahe">CLAHE</option><option value="gamma">Gamma</option></select>
+        <label for="intervalo">Intervalo de clip</label>
+        <select id="intervalo" name="intervalo"><option value="0.2">0,2 s</option><option value="0.5">0,5 s</option><option value="1.0">1,0 s</option></select>
+        <button type="submit" id="analizar">Analizar con Imagen <span>↗</span></button>
+      </form>
+      <div class="linea-ayuda"><span id="estado">Esperando archivo.</span><span>Se procesan archivos locales en tu servidor; no se envían a Video.</span></div>
+    </section>
+    <section class="panel estado-global" aria-live="polite">
+      <div><p class="supra">ESTADO DE LA EVIDENCIA</p><h2 id="titulo-estado">Esperando un análisis</h2><p id="explicacion-estado">Selecciona una foto o un clip para ver las señales observadas realmente.</p></div>
+      <div id="estado-circulo" class="estado-circulo neutral">SIN ANALIZAR</div>
+    </section>
+    <section class="metricas" id="metricas">
+      <div class="panel metrica"><small>Fotogramas analizados</small><b id="total">—</b></div>
+      <div class="panel metrica"><small>Fotogramas para revisión</small><b id="alertas">—</b></div>
+      <div class="panel metrica"><small>Rescates mediante ROI</small><b id="rescatados">—</b></div>
+      <div class="panel metrica"><small>Tiempo de análisis</small><b id="tiempo">—</b></div>
+      <div class="panel metrica"><small>Celulares / otros objetos (detecciones)</small><b id="objetos">—</b></div>
+      <div class="panel metrica"><small>Fotogramas con calidad limitada</small><b id="calidad-contador">—</b></div>
+    </section>
+    <p id="meta-clip" class="dato-nota">Los conteos son observaciones por fotograma; no equivalen a personas únicas.</p>
+    <div class="columnas">
+      <section class="panel">
+        <div class="encabezado"><h2>Fotograma original</h2><span class="etiqueta">SIN ANOTACIONES</span></div>
+        <div class="visor"><img id="original" alt="Fotograma original" hidden><div class="vacio" id="vacio-original">Selecciona un archivo para comenzar.</div></div>
+      </section>
+      <section class="panel">
+        <div class="encabezado"><h2>Análisis de Imagen</h2><span class="etiqueta" id="etiqueta-evidencia">EVIDENCIA REAL</span></div>
+        <div class="visor"><img id="anotada" alt="Fotograma con detecciones" hidden><div class="vacio" id="vacio-anotada">Aquí aparecerá la imagen anotada por el modelo.</div></div>
+      </section>
+    </div>
+    <section class="panel muestras-panel" id="seleccion-panel" hidden>
+      <div class="encabezado"><h2>Secuencia del clip</h2><span class="etiqueta">SELECCIONA UN FOTOGRAMA</span></div>
+      <div class="filtros" id="filtros"><button type="button" data-filtro="todos" class="activo">Todos</button><button type="button" data-filtro="revision">Para revisión</button><button type="button" data-filtro="observacion">Observaciones</button></div>
+      <div id="muestras" class="muestras"></div>
+      <label for="visor-video">Clip original (reproducción local del navegador)</label>
+      <video controls playsinline id="visor-video"></video>
+    </section>
+    <section class="columnas inferior">
+      <div class="panel detalles">
+        <div class="encabezado"><h2>Evidencias del fotograma</h2><span id="instante" class="etiqueta">—</span></div>
+        <div id="estado-frame" class="estado-frame">Sin fotograma seleccionado</div>
+        <div id="resumen">Todavía no hay observaciones para mostrar.</div>
+        <h3>Señales visuales explicadas</h3><div id="senales" class="senales"><p class="descripcion">Todavía no hay resultados.</p></div>
+        <h3>Objetos detectados por YOLO</h3><div id="lista-objetos" class="chips">—</div>
+        <h3>Diagnóstico de calidad y correcciones</h3><div class="comparacion-metricas" id="detalle-calidad">Esperando datos.</div>
+        <h3>Advertencias técnicas</h3><ul id="advertencias"><li>El resultado de una pose aislada no confirma una caída.</li></ul>
+      </div>
+      <div class="panel detalles">
+        <div class="encabezado"><h2>Datos y mediciones</h2><span class="etiqueta">JSON REAL</span></div>
+        <p class="dato-nota">Los tiempos reflejan la ejecución del modelo, no la velocidad de reproducción.</p>
+        <div id="detalle-tiempo" class="lista-datos">Esperando análisis.</div>
+        <div class="acciones"><button id="descargar-json" disabled>Descargar JSON</button><button id="descargar-frame" disabled>Guardar fotograma anotado</button></div>
+        <details><summary>Ver JSON del fotograma seleccionado</summary><pre id="json-dato">{}</pre></details>
+      </div>
+    </section>
+    <footer>Laboratorio experimental de Imagen · Resultados locales reales · No detecta marcha anómala de forma fiable ni confirma accidentes. Video y Audio siguen separados hasta una integración acordada.</footer>
+  </main>
+</body>
+</html>
