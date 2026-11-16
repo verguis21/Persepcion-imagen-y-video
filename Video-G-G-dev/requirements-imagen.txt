@@ -1,0 +1,31 @@
+# Dependencias minimas del modulo Imagen (contrato imagen-evidencia-1.0).
+#
+# Python 3.11. Sin paquetes CUDA: el requirements.txt general (Video) no se
+# toca ni se instala desde aqui. En Windows se instala con:
+#   .\instalar_imagen.ps1
+#
+# Regla de equipo: ningun paquete nuevo entra sin su linea, con version, en
+# este archivo.
+#
+# LINUX: ultralytics arrastra torch, y el torch de PyPI en Linux trae los
+# paquetes nvidia-*. Antes de instalar este archivo, instalar torch y
+# torchvision CPU desde el indice oficial de PyTorch:
+#   python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#   python -m pip install -r requirements-imagen.txt
+
+numpy==1.26.4
+opencv-python==4.10.0.84
+ultralytics==8.4.170
+matplotlib==3.11.2
+
+# Ruta HTTP y pruebas HTTP (sin Flask esas pruebas se saltan por importorskip)
+Flask==3.1.3
+Werkzeug==3.1.5
+
+# Descriptores HOG + LBP y clasificador de postura propio (etapa 6)
+scikit-learn==1.9.1
+scikit-image==0.26.0
+joblib==1.6.0
+
+# Pruebas
+pytest==9.2.0
