@@ -8,7 +8,7 @@
       "calidad": {"luminosidad": 96.2, "contraste": 41.0, "nitidez_laplaciana": 212.5, "energia_alta_frecuencia": 0.18, "ruido_mad_estimado": 2.0, "desenfoque_movimiento": {"anisotropia": 0.41, "direccion_grados": 12.0}, "apto_para_detalle": true},
       "restauracion": {"operaciones": ["nlm_h=6", "mascara_enfoque=0.8"], "nitidez_antes": 212.5, "nitidez_despues": 301.9},
       "deteccion_restaurada": {"personas": 1, "objetos": 2, "solo_tras_restaurar": [{"clase": "cell phone", "bbox": [301, 262, 322, 300], "confianza_detector": 0.41}]},
-      "escena": {"origen_zona": "calibracion_manual", "zona_escalones": [[120, 400], [520, 380], [600, 700], [60, 710]], "lineas_escalon_detectadas": 7, "pasamanos": {"visible": true, "segmento": [540, 120, 640, 620]}},
+      "escena": {"origen_zona": "calibracion_manual", "zona_escalones": [[120, 400], [520, 380], [600, 700], [60, 710]], "lineas_escalon_detectadas": 7, "pasamanos": {"visible": true, "segmento": [540, 120, 640, 620], "segmentos": [[540, 120, 640, 620]]}},
       "personas": [
         {"detection_id": 0, "origen": "yolo", "bbox": [210, 140, 330, 520], "confianza_detector": 0.88, "inclinacion_torso_grados": 38.0, "postura_reglas_pose": "inclinacion_para_revision", "postura_clasificador": "inclinada", "concordancia_posturas": true, "en_zona_escalones": true, "contacto_pasamanos": "no", "objetos_en_mano": [{"clase": "cell phone", "mano": "derecha", "confianza_detector": 0.47}]}
       ],

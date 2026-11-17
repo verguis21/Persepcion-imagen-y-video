@@ -267,3 +267,122 @@ def test_fotograma_no_decodificado_se_omite_y_resumen():
     assert resumen['posturas_observadas'] == {'inclinada': 1}
     assert resumen['clases_objeto'] == {'cell phone': 2, 'backpack': 2}
     validar_evidencia(evidencia)
+
+
+# ---------------------------------------------------------------------------
+# Paso 6: integracion de las piezas (escena, relaciones, deteccion doble)
+# ---------------------------------------------------------------------------
+import sys as _sys
+import types as _types
+
+import numpy as _np
+
+from app.modulo_imagen import evidencia as _ev
+
+
+def _persona(det_id, caja, muneca_derecha):
+    puntos = [[0.0, 0.0, 0.0] for _ in range(17)]
+    puntos[10] = [muneca_derecha[0], muneca_derecha[1], 0.9]
+    return {'detection_id': det_id, 'bbox': caja, 'confianza': 0.9, 'pose_asociada': True,
+            'estado_postural': 'sin_indicio_suficiente',
+            'pose': {'bbox': caja, 'inclinacion_torso': 5.0, 'puntos_corporales': puntos}}
+
+
+def _dato_dos_personas(calibracion=None):
+    return {'segundo_s': 1.0, 'fotograma_indice': 5,
+            'calidad_original': {'luminosidad': 100, 'contraste': 40, 'nitidez_laplaciana': 200, 'ruido_mad_estimado': 1},
+            'personas': [_persona(0, [100, 100, 200, 400], (190, 250)),
+                         _persona(1, [230, 100, 330, 400], (260, 250))],
+            'poses_sin_asociar': [],
+            'celulares': [{'clase': 'cell phone', 'bbox': [185, 240, 205, 260], 'confianza': 0.5}],
+            'otros_objetos': [],
+            'evidencia_imagen': {'calidad': None, 'restauracion': None, 'deteccion_restaurada': None,
+                                 'escena': None, 'calibracion': calibracion, 'posturas_clasificador': None}}
+
+
+def test_un_objeto_solo_queda_con_la_persona_mas_cercana():
+    f = _ev.construir_fotograma(_dato_dos_personas())
+    assert [o['clase'] for o in f['personas'][0]['objetos_en_mano']] == ['cell phone']
+    assert f['personas'][1]['objetos_en_mano'] == []
+    assert f['objetos'][0]['asociado_a_persona'] == 0
+    assert 'indice_objeto' not in f['personas'][0]['objetos_en_mano'][0]
+
+
+def test_zona_y_pasamanos_con_calibracion():
+    cal = {'zona_escalones': [[50, 300], [400, 300], [400, 450], [50, 450]], 'pasamanos': [195, 0, 195, 500]}
+    f = _ev.construir_fotograma(_dato_dos_personas(cal))
+    assert f['personas'][0]['en_zona_escalones'] is True
+    assert f['personas'][0]['contacto_pasamanos'] == 'si'
+    assert f['objetos'][0]['en_zona_escalones'] is False
+
+
+def test_sin_calibracion_no_se_evalua():
+    f = _ev.construir_fotograma(_dato_dos_personas())
+    assert f['personas'][0]['en_zona_escalones'] is None
+    assert f['personas'][0]['contacto_pasamanos'] == 'no_evaluable'
+    assert f['objetos'][0]['en_zona_escalones'] is None
+
+
+def _imagen_ruidosa():
+    rng = _np.random.default_rng(3)
+    return rng.integers(0, 255, (240, 320, 3), dtype=_np.uint8)
+
+
+def test_enriquecedor_basico_no_toca_otras_claves():
+    dato = _dato_dos_personas()
+    del dato['evidencia_imagen']
+    antes = {k: v for k, v in dato.items()}
+    _ev.crear_enriquecedor()(_np.full((240, 320, 3), 120, dtype=_np.uint8), dato)
+    extra = dato.pop('evidencia_imagen')
+    assert dato == antes
+    assert extra['posturas_clasificador'] == ['no_disponible', 'no_disponible']
+    assert extra['deteccion_restaurada'] is None
+    assert extra['escena']['origen_zona'] == 'no_disponible'
+    assert set(extra['calidad']) >= {'nitidez_laplaciana', 'energia_alta_frecuencia'}
+
+
+def test_deteccion_doble_reporta_solo_lo_nuevo():
+    dato = _dato_dos_personas()
+    llamadas = []
+    def detector_falso(imagen):
+        llamadas.append(1)
+        return imagen, [{'clase': 'person', 'bbox': [100, 100, 200, 400], 'confianza': 0.9},
+                        {'clase': 'cell phone', 'bbox': [10, 10, 30, 30], 'confianza': 0.4}]
+    _ev.crear_enriquecedor(deteccion_doble=True, detector=detector_falso)(_imagen_ruidosa(), dato)
+    bloque = dato['evidencia_imagen']['deteccion_restaurada']
+    assert llamadas == [1]
+    assert [d['clase'] for d in bloque['solo_tras_restaurar']] == ['cell phone']
+    assert bloque['personas'] == 1 and bloque['objetos'] == 1
+
+
+def test_deteccion_doble_apagada_no_llama_al_detector():
+    dato = _dato_dos_personas()
+    def detector_falso(imagen):
+        raise AssertionError('no debia llamarse')
+    _ev.crear_enriquecedor(deteccion_doble=False, detector=detector_falso)(_imagen_ruidosa(), dato)
+    assert dato['evidencia_imagen']['deteccion_restaurada'] is None
+
+
+def test_evidencia_de_clip_valida_y_avisa_sin_calibracion(monkeypatch, tmp_path):
+    falso = _types.ModuleType('app.modulo_imagen.analizador_clip')
+    def analizar_clip(ruta, **kwargs):
+        dato = _dato_dos_personas()
+        del dato['evidencia_imagen']
+        kwargs['enriquecer'](_np.full((240, 320, 3), 120, dtype=_np.uint8), dato)
+        return {'duracion_s': 2.0, 'fps_origen': 5.0, 'contexto_video': kwargs.get('contexto_video') or {},
+                'resultados': [dato]}, []
+    falso.analizar_clip = analizar_clip
+    monkeypatch.setitem(_sys.modules, falso.__name__, falso)
+    ev = _ev.evidencia_de_clip(tmp_path / 'g2_1117_a1_celular_02.mp4', camara_id='escalera_g')
+    _ev.validar_evidencia(ev)
+    assert ev['clip']['clip_id'] == 'g2_1117_a1_celular_02'
+    assert any("escalera_g" in l for l in ev['limitaciones'])
+    assert ev['fotogramas'][0]['deteccion_restaurada'] is None
+
+
+def test_objeto_puesto_se_distingue_del_abandonado():
+    dato = _dato_dos_personas()
+    dato['otros_objetos'] = [{'clase': 'backpack', 'bbox': [120, 150, 180, 230], 'confianza': 0.6},   # en la espalda
+                             {'clase': 'backpack', 'bbox': [500, 380, 560, 440], 'confianza': 0.6}]   # sola
+    f = _ev.construir_fotograma(dato)
+    assert [o['solapa_persona'] for o in f['objetos']] == [True, True, False]

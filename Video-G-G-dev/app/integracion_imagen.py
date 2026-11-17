@@ -133,20 +133,30 @@ def recibir_fotograma():
                         'mensaje': 'No fue posible analizar el fotograma'}), 500
 
 
+def _leer_peticion_clip():
+    """Validaciones comunes de las rutas que reciben un clip (/clip y /evidencia).
+
+    Devuelve (contenido, metadatos, modo, intervalo, extension) o lanza
+    ValueError / OverflowError / UnicodeDecodeError.
+    """
+    if request.content_length and request.content_length > MAX_CLIP_BYTES + 128 * 1024:
+        raise OverflowError('Solicitud de clip demasiado grande')
+    contenido = _archivo('clip', MAX_CLIP_BYTES)
+    metadatos, modo = _configuracion('clip')
+    intervalo = float(request.form.get('intervalo_s', '1.0'))
+    if not math.isfinite(intervalo) or not (0.1 <= intervalo <= 5.0):
+        raise ValueError('intervalo_s debe estar entre 0.1 y 5.0 segundos')
+    extension = Path(request.files['clip'].filename or '').suffix.lower()
+    if extension not in ('.mp4', '.avi', '.mov', '.mkv'):
+        raise ValueError('El clip debe ser MP4, AVI, MOV o MKV')
+    return contenido, metadatos, modo, intervalo, extension
+
+
 @integracion_bp.post('/api/imagen/v1/clip')
 def recibir_clip():
     try:
-        if request.content_length and request.content_length > MAX_CLIP_BYTES + 128 * 1024:
-            raise OverflowError('Solicitud de clip demasiado grande')
-        contenido = _archivo('clip', MAX_CLIP_BYTES)
-        metadatos, modo = _configuracion('clip')
-        intervalo = float(request.form.get('intervalo_s', '1.0'))
+        contenido, metadatos, modo, intervalo, extension = _leer_peticion_clip()
         incluir_muestras = request.form.get('incluir_muestras', '0') in ('1','true','True')
-        if not math.isfinite(intervalo) or not (0.1 <= intervalo <= 5.0):
-            raise ValueError('intervalo_s debe estar entre 0.1 y 5.0 segundos')
-        extension = Path(request.files['clip'].filename or '').suffix.lower()
-        if extension not in ('.mp4', '.avi', '.mov', '.mkv'):
-            raise ValueError('El clip debe ser MP4, AVI, MOV o MKV')
     except (ValueError, OverflowError, UnicodeDecodeError) as exc:
         return _error_conocido(exc)
     ruta = None
@@ -181,6 +191,44 @@ def recibir_clip():
         return _error_conocido(exc)
     except Exception:
         current_app.logger.exception('Error en analisis de clip por Imagen')
+        return jsonify({'estado': 'error', 'schema_version': VERSION,
+                        'mensaje': 'No fue posible analizar el clip'}), 500
+    finally:
+        if ruta is not None:
+            ruta.unlink(missing_ok=True)
+
+
+
+@integracion_bp.post('/api/imagen/v1/evidencia')
+def recibir_clip_evidencia():
+    """Mismo formulario que /clip; responde el JSON imagen-evidencia-1.0 para Prediccion."""
+    try:
+        contenido, metadatos, modo, intervalo, extension = _leer_peticion_clip()
+    except (ValueError, OverflowError, UnicodeDecodeError) as exc:
+        return _error_conocido(exc)
+    ruta = None
+    try:
+        from .modulo_imagen.evidencia import evidencia_de_clip
+        from .modulo_imagen.escena import cargar_calibracion
+        modelo = None
+        try:
+            # El clasificador propio es la pieza de C; si aun no existe, se sigue sin el.
+            from .modulo_imagen.clasificador_postura import cargar_modelo
+            modelo = cargar_modelo()
+        except ImportError:
+            modelo = None
+        with tempfile.NamedTemporaryFile(suffix=extension, prefix='imagen_', delete=False) as f:
+            f.write(contenido)
+            ruta = Path(f.name)
+        evidencia = evidencia_de_clip(
+            ruta, clip_id=metadatos['clip_id'], camara_id=metadatos['camara_id'],
+            contexto_video=metadatos['contexto_video'], modo=modo, intervalo_s=intervalo,
+            modelo_postura=modelo, calibracion=cargar_calibracion(metadatos['camara_id']))
+        return jsonify(evidencia)
+    except ValueError as exc:
+        return _error_conocido(exc)
+    except Exception:
+        current_app.logger.exception('Error al armar la evidencia del clip')
         return jsonify({'estado': 'error', 'schema_version': VERSION,
                         'mensaje': 'No fue posible analizar el clip'}), 500
     finally:

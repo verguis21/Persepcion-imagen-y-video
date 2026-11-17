@@ -14,6 +14,7 @@ import copy
 from collections import Counter
 
 VERSION = 'imagen-evidencia-1.0'
+DETECCION_DOBLE = False   # A la cambia a True si el experimento de la etapa 3 muestra mejora
 CLAVES_PROHIBIDAS = ('riesgo', 'probabilidad', 'alerta', 'accidente')
 
 # Valores cerrados de la sección 4 del plan. Todos admiten además `None`.
@@ -178,18 +179,64 @@ def _calidad_desde_original(dato):
     return {clave: calidad[clave] for clave in orden}
 
 
+def _base_de_caja(caja):
+    """Punto medio de la base de una caja [x1, y1, x2, y2] (donde apoya en el suelo)."""
+    return ((float(caja[0]) + float(caja[2])) / 2.0, float(caja[3]))
+
+
+def _en_zona(caja, zona):
+    if zona is None or caja is None or len(caja) != 4:
+        return None
+    from .escena import punto_en_zona
+    return bool(punto_en_zona(_base_de_caja(caja), zona))
+
+
 def construir_fotograma(dato: dict) -> dict:
     """Traduce un `dato` de `analizar_frame` al fotograma del contrato."""
+    from .relaciones import contacto_pasamanos, objetos_en_mano
     extra = dato.get('evidencia_imagen') or {}
     posturas_clf = extra.get('posturas_clasificador')
+    calibracion = extra.get('calibracion') or {}
+    zona = calibracion.get('zona_escalones')
+    segmento = calibracion.get('pasamanos')
+    objetos = []
+    for obj in list(dato.get('celulares') or []) + list(dato.get('otros_objetos') or []):
+        caja = _lista(obj.get('bbox'))
+        objetos.append({'clase': obj.get('clase'), 'bbox': caja,
+                        'confianza_detector': obj.get('confianza'),
+                        'en_zona_escalones': _en_zona(caja, zona), 'asociado_a_persona': None})
+    crudas = personas_de_dato(dato)
+    # Una mochila puesta cae "sobre los escalones" igual que una abandonada:
+    # `solapa_persona` permite distinguirlas (centro del objeto dentro de la caja de alguien).
+    for obj in objetos:
+        caja = obj['bbox']
+        centro = ((caja[0] + caja[2]) / 2.0, (caja[1] + caja[3]) / 2.0) if caja and len(caja) == 4 else None
+        obj['solapa_persona'] = None if centro is None else any(
+            len(p.get('bbox') or []) == 4 and p['bbox'][0] <= centro[0] <= p['bbox'][2]
+            and p['bbox'][1] <= centro[1] <= p['bbox'][3] for p in crudas)
+    # Candidatos de "objeto en mano" por persona; despues cada objeto se queda
+    # solo con la persona mas cercana.
+    candidatos = [objetos_en_mano(p, objetos) for p in crudas]
+    mejor = {}
+    for i, lista in enumerate(candidatos):
+        for c in lista:
+            actual = mejor.get(c['indice_objeto'])
+            if actual is None or c['distancia_relativa'] < actual[1]:
+                mejor[c['indice_objeto']] = (i, c['distancia_relativa'])
     personas = []
-    for i, p in enumerate(personas_de_dato(dato)):
+    for i, p in enumerate(crudas):
         regla = p['estado_postural']
         if posturas_clf is not None and i < len(posturas_clf):
             clasificador = posturas_clf[i]
         else:
             clasificador = 'no_disponible'
         pose = p.get('pose') or {}
+        en_mano = []
+        for c in candidatos[i]:
+            if mejor[c['indice_objeto']][0] != i:
+                continue
+            objetos[c['indice_objeto']]['asociado_a_persona'] = p['detection_id']
+            en_mano.append({'clase': c['clase'], 'mano': c['mano'], 'confianza_detector': c['confianza_detector']})
         personas.append({
             'detection_id': p['detection_id'],
             'origen': p['origen'],
@@ -199,15 +246,10 @@ def construir_fotograma(dato: dict) -> dict:
             'postura_reglas_pose': regla,
             'postura_clasificador': clasificador,
             'concordancia_posturas': concordancia_posturas(regla, clasificador),
-            'en_zona_escalones': None,
-            'contacto_pasamanos': 'no_evaluable',
-            'objetos_en_mano': [],
+            'en_zona_escalones': _en_zona(_lista(p['bbox']), zona),
+            'contacto_pasamanos': contacto_pasamanos(p, segmento),
+            'objetos_en_mano': en_mano,
         })
-    objetos = []
-    for obj in list(dato.get('celulares') or []) + list(dato.get('otros_objetos') or []):
-        objetos.append({'clase': obj.get('clase'), 'bbox': _lista(obj.get('bbox')),
-                        'confianza_detector': obj.get('confianza'),
-                        'en_zona_escalones': None, 'asociado_a_persona': None})
     calidad = extra.get('calidad')
     return {
         'indice': dato.get('fotograma_indice'),
@@ -265,3 +307,105 @@ def construir_evidencia(resultado_clip: dict, *, clip_id: str, camara_id: str) -
         'resumen': _resumen(fotogramas),
         'limitaciones': list(LIMITACIONES_BASE),
     }
+
+
+def _iou(a, b):
+    """Solapamiento entre dos cajas [x1, y1, x2, y2], entre 0 y 1."""
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - ix * iy
+    return ix * iy / union if union > 0 else 0.0
+
+
+def _deteccion_restaurada(restaurada, dato, hubo_operaciones, detector):
+    """Segunda pasada del detector sobre la imagen restaurada, comparada con la normal."""
+    normales = ([{'clase': 'person', 'bbox': p['bbox']} for p in dato.get('personas') or []]
+                + list(dato.get('celulares') or []) + list(dato.get('otros_objetos') or []))
+    if not hubo_operaciones:
+        # La imagen no cambio: repetir la deteccion daria lo mismo.
+        personas = sum(1 for d in normales if d['clase'] == 'person')
+        return {'personas': personas, 'objetos': len(normales) - personas, 'solo_tras_restaurar': []}
+    if detector is None:
+        from .detector import detectar_imagen as detector   # carga YOLO: solo si hace falta
+    detecciones = detector(restaurada)[1]
+    nuevas = []
+    for d in detecciones:
+        if not any(n.get('clase') == d['clase'] and len(n.get('bbox') or []) == 4
+                   and _iou(d['bbox'], n['bbox']) >= 0.5 for n in normales):
+            nuevas.append({'clase': d['clase'], 'bbox': _lista(d['bbox']), 'confianza_detector': d.get('confianza')})
+    personas = sum(1 for d in detecciones if d['clase'] == 'person')
+    return {'personas': personas, 'objetos': len(detecciones) - personas, 'solo_tras_restaurar': nuevas}
+
+
+def crear_enriquecedor(*, modelo_postura=None, calibracion=None, modo='adaptativo',
+                       variante_postura='original', umbral_nitidez=None,
+                       deteccion_doble=False, detector=None):
+    """Devuelve la funcion `(original, dato) -> None` que se pasa a `analizar_clip`.
+
+    Escribe SOLO `dato['evidencia_imagen']`; no toca ninguna otra clave.
+    """
+    from .escena import bloque_escena, escalar_calibracion
+    from .nitidez import bloque_calidad
+    from .preprocesamiento import mejorar_imagen
+    from .restauracion import restaurar
+
+    def enriquecer(original, dato):
+        calidad = bloque_calidad(original, umbral_nitidez=umbral_nitidez)
+        restaurada, restauracion = restaurar(mejorar_imagen(original, modo=modo)[0], calidad)
+        alto, ancho = original.shape[:2]
+        cal = escalar_calibracion(calibracion, ancho, alto) if calibracion else None
+        personas = personas_de_dato(dato)
+        if modelo_postura is None:
+            posturas = ['no_disponible'] * len(personas)
+        else:
+            # El clasificador es la pieza de C (paso 5); se importa solo si hay modelo.
+            from .clasificador_postura import predecir_postura
+            variante = restaurada if variante_postura == 'restaurada' else original
+            posturas = [predecir_postura(variante, p['bbox'], modelo_postura) for p in personas]
+        dato['evidencia_imagen'] = {
+            'calidad': calidad,
+            'restauracion': restauracion,
+            'deteccion_restaurada': (_deteccion_restaurada(restaurada, dato, bool(restauracion['operaciones']), detector)
+                                     if deteccion_doble else None),
+            'escena': bloque_escena(original, cal),
+            'calibracion': cal,
+            'posturas_clasificador': posturas,
+        }
+    return enriquecer
+
+
+def evidencia_de_clip(ruta_clip, *, clip_id=None, camara_id='camara_local', contexto_video=None,
+                      modo='adaptativo', intervalo_s=1.0, modelo_postura=None, calibracion=None,
+                      deteccion_doble=None) -> dict:
+    """Analiza un clip y devuelve el JSON imagen-evidencia-1.0 ya validado.
+
+    No carga por su cuenta ni modelo ni calibracion: los pasa quien llama.
+    `deteccion_doble=None` significa usar la constante DETECCION_DOBLE.
+    """
+    import json
+    from pathlib import Path
+
+    from .analizador_clip import analizar_clip   # carga YOLO: import diferido
+    doble = DETECCION_DOBLE if deteccion_doble is None else bool(deteccion_doble)
+    enriquecer = crear_enriquecedor(modelo_postura=modelo_postura, calibracion=calibracion,
+                                    modo=modo, deteccion_doble=doble)
+    resultado, _ = analizar_clip(ruta_clip, modo=modo, intervalo_s=intervalo_s,
+                                 contexto_video=contexto_video, enriquecer=enriquecer)
+    evidencia = construir_evidencia(resultado, clip_id=clip_id or Path(ruta_clip).stem, camara_id=camara_id)
+    if calibracion is None:
+        evidencia['limitaciones'].append(f"Sin calibración para la cámara '{camara_id}': "
+                                         'zona de escalones y pasamanos no evaluados.')
+    if modelo_postura is None:
+        evidencia['limitaciones'].append('Clasificador de postura propio no disponible; solo regla de pose.')
+    else:
+        registro = Path('runs/imagen/postura_svm.json')
+        detalle = ''
+        if registro.is_file():
+            try:
+                info = json.loads(registro.read_text(encoding='utf-8'))
+                detalle = f" con {info.get('filas')} filas de {info.get('clips')} clips propios"
+            except (ValueError, OSError):
+                detalle = ''
+        evidencia['limitaciones'].append(f'Clasificador de postura entrenado{detalle}; ver informe de evaluación.')
+    validar_evidencia(evidencia)
+    return evidencia

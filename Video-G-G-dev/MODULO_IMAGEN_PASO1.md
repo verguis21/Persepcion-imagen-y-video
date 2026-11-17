@@ -20,3 +20,7 @@ La ruta devuelve el JSON `imagen-0.1.0` con `metadata_captura`, `vector_caracter
 ## Validación
 
 Comparar manualmente coordenadas de detección, `track_id`, señales pose y calidad óptica con las imágenes reales. No se ha demostrado todavía precisión de riesgos ni reconocimiento de agua. Para una grabación de ensayo, usar situaciones simuladas seguras sin caídas reales.
+
+## Evidencia para Predicción
+
+El plan `plans/2026-11-14_modulo-imagen-evidencia.md` define el contrato `imagen-evidencia-1.0`: Imagen entrega evidencia medible, sin porcentajes de riesgo. La ruta `POST /api/imagen/v1/evidencia` recibe el mismo formulario que `/api/imagen/v1/clip` y responde ese JSON. Para verlo sin servidor: `python -m scripts.imagen_demo clip.mp4 --camara <camara_id>`. Para ver cada etapa sobre una foto: `python -m app.pipeline_imagen`.
