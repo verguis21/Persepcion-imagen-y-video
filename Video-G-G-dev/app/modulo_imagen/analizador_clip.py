@@ -67,11 +67,14 @@ def _cercano_bbox(actual, previo):
 
 def analizar_clip(ruta_clip, *, modo='adaptativo', intervalo_s=1.0,
                   tiempos_interes=None, guardar_en=None, contexto_video=None,
-                  max_duracion_s=10.5):
+                  max_duracion_s=10.5, enriquecer=None):
     """Devuelve (resumen JSON-serializable, fotogramas procesados).
 
     El clip se lee con OpenCV. `contexto_video` conserva metadatos del detector
     de escaleras de Video; nunca ejecuta RiskEngine ni su tracking.
+    `enriquecer`, si se pasa, es una función `(original, dato) -> None` que
+    añade las piezas nuevas (calidad, restauración, escena, postura) bajo
+    `dato['evidencia_imagen']`; sin ella el comportamiento es el de siempre.
     """
     ruta = Path(ruta_clip)
     captura = cv2.VideoCapture(str(ruta))
@@ -184,6 +187,8 @@ def analizar_clip(ruta_clip, *, modo='adaptativo', intervalo_s=1.0,
                 cv2.putText(anotada, 'INDICIO PREVIO - EN SEGUIMIENTO',
                             (12, max(22, anotada.shape[0] - 42)),
                             cv2.FONT_HERSHEY_SIMPLEX, .54, (0, 175, 255), 2)
+            if enriquecer is not None:
+                enriquecer(original, dato)
             agregar_senales(dato)
             dato['tiempos_ms']['total_frame_con_roi'] = round((time.perf_counter()-inicio_frame)*1000,1)
             dato.pop('imagen_anotada', None)

@@ -3,6 +3,16 @@ stairs_fallhuman
 
 # --- Entorno virtual y dependencias ---
 venv
+# Entorno del modulo Imagen creado por instalar_imagen.ps1
+.venv_imagen/
+
+# --- Datos propios del modulo Imagen ---
+# Clips, fotogramas y la foto de la escalera vacia se comparten por Drive,
+# nunca por git. Solo se versionan la hoja de etiquetas y la lista de clips
+# de prueba.
+datos_propios/*
+!datos_propios/etiquetas.csv
+!datos_propios/clips_prueba.txt
 
 # --- Datasets generados por los scripts de preparacion ---
 # Contienen symlinks a las imagenes originales mas los labels reescritos y

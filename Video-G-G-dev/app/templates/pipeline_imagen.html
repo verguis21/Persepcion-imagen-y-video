@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline del módulo Imagen</title>
+<style>
+  :root { --tinta:#1c2733; --suave:#5b6876; --linea:#d5dbe1; --fondo:#f4f1ea; --papel:#fffdf8; --acento:#b4502a; --hecho:#2f6f5e; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--fondo); color:var(--tinta); font:15px/1.5 "Segoe UI", system-ui, sans-serif; }
+  header { padding:22px 28px 14px; border-bottom:2px solid var(--tinta); }
+  h1 { margin:0; font:600 22px/1.2 Georgia, "Times New Roman", serif; }
+  header p { margin:6px 0 0; color:var(--suave); max-width:70ch; }
+  main { padding:20px 28px 60px; max-width:1180px; }
+  .entrada { display:flex; flex-wrap:wrap; gap:14px; align-items:center; padding:14px 16px; background:var(--papel); border:1px solid var(--linea); }
+  .entrada label { color:var(--suave); }
+  button { font:inherit; cursor:pointer; border:1px solid var(--tinta); background:var(--papel); color:var(--tinta); padding:7px 14px; }
+  button:hover:not(:disabled) { background:var(--tinta); color:var(--papel); }
+  button:disabled { opacity:.45; cursor:default; }
+  button.principal { background:var(--acento); border-color:var(--acento); color:#fff; }
+  #original { display:none; max-width:100%; max-height:300px; margin-top:14px; border:1px solid var(--linea); }
+  ol.pasos { list-style:none; margin:26px 0 0; padding:0; counter-reset:paso; }
+  ol.pasos > li { counter-increment:paso; position:relative; margin:0 0 0 18px; padding:0 0 26px 30px; border-left:2px solid var(--tinta); }
+  ol.pasos > li:last-child { border-left-color:transparent; }
+  ol.pasos > li::before { content:counter(paso); position:absolute; left:-15px; top:-2px; width:28px; height:28px; border-radius:50%;
+    background:var(--tinta); color:var(--papel); font:600 14px/28px Georgia, serif; text-align:center; }
+  ol.pasos > li.listo::before { background:var(--hecho); }
+  .cab { display:flex; flex-wrap:wrap; gap:10px 16px; align-items:baseline; }
+  .cab h2 { margin:0; font:600 17px/1.3 Georgia, serif; }
+  .cab .sesion { color:var(--acento); font-size:13px; letter-spacing:.03em; }
+  .cab .tiempo { color:var(--suave); font-size:13px; margin-left:auto; }
+  .que { margin:3px 0 10px; color:var(--suave); max-width:75ch; }
+  .salida { display:none; margin-top:12px; padding:14px; background:var(--papel); border:1px solid var(--linea); }
+  .salida.ver { display:grid; gap:16px; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); }
+  .salida.ver.solo { grid-template-columns:1fr; }
+  .salida img { width:100%; border:1px solid var(--linea); display:block; }
+  .salida pre { margin:0; font:13px/1.45 Consolas, "Courier New", monospace; white-space:pre-wrap; word-break:break-word; max-height:420px; overflow:auto; }
+  .nota { grid-column:1/-1; margin:0; color:var(--suave); font-size:13.5px; border-top:1px dashed var(--linea); padding-top:10px; }
+  .error { color:#a11; }
+  .pendiente { margin-top:8px; padding:14px 16px; border:1px dashed var(--suave); color:var(--suave); max-width:80ch; }
+  .pendiente strong { color:var(--tinta); }
+  @media (max-width:760px) { .salida.ver { grid-template-columns:1fr; } main, header { padding-left:16px; padding-right:16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pipeline del módulo Imagen</h1>
+  <p>Suba una foto y ejecute cada etapa por separado para ver qué entra y qué sale. Solo aparecen las etapas que ya están programadas.</p>
+</header>
+<main>
+  <section class="entrada">
+    <input type="file" id="archivo" accept="image/jpeg,image/png">
+    <label><input type="checkbox" id="forzar"> Forzar la restauración</label>
+    <button class="principal" id="todo" disabled>Ejecutar todo en orden</button>
+  </section>
+  <img id="original" alt="Imagen original subida">
+
+  <ol class="pasos">
+    <li data-paso="calidad">
+      <div class="cab"><h2>Calidad del fotograma</h2><span class="sesion">S03 · S09</span><span class="tiempo"></span></div>
+      <p class="que">Mide luz, contraste, nitidez, ruido y borrón de movimiento. No descarta nada.</p>
+      <button disabled>Medir calidad</button><div class="salida"></div>
+    </li>
+    <li data-paso="fourier">
+      <div class="cab"><h2>Espectro de Fourier</h2><span class="sesion">S09</span><span class="tiempo"></span></div>
+      <p class="que">Muestra la foto en frecuencias: de ahí sale la medida de nitidez por alta frecuencia.</p>
+      <button disabled>Ver espectro</button><div class="salida"></div>
+    </li>
+    <li data-paso="mejora">
+      <div class="cab"><h2>Mejora adaptativa</h2><span class="sesion">S04</span><span class="tiempo"></span></div>
+      <p class="que">Aclara y sube el contraste si la foto está oscura. Es la mejora que el módulo ya tenía.</p>
+      <button disabled>Mejorar</button><div class="salida"></div>
+    </li>
+    <li data-paso="restauracion">
+      <div class="cab"><h2>Restauración</h2><span class="sesion">S03 · S10</span><span class="tiempo"></span></div>
+      <p class="que">Quita granulado y enfoca, solo cuando las medidas de calidad lo piden.</p>
+      <button disabled>Restaurar</button><div class="salida"></div>
+    </li>
+    <li data-paso="deteccion">
+      <div class="cab"><h2>Detección y pose</h2><span class="sesion">S15</span><span class="tiempo"></span></div>
+      <p class="que">Personas, objetos y esqueleto con redes ya entrenadas. La primera vez tarda porque carga los modelos.</p>
+      <button disabled>Detectar</button><div class="salida"></div>
+    </li>
+    <li data-paso="evidencia">
+      <div class="cab"><h2>Evidencia para Predicción</h2><span class="sesion">S01</span><span class="tiempo"></span></div>
+      <p class="que">Junta lo anterior en el formato pactado. Sin porcentajes de riesgo.</p>
+      <button disabled>Armar evidencia</button><div class="salida"></div>
+    </li>
+  </ol>
+
+  <div class="pendiente"><strong>Todavía no programado:</strong> escena (escalones y pasamanos), objetos en mano y contacto con el pasamanos, clasificador de postura propio, evaluación y análisis de clips completos. Sus casilleros ya existen en la evidencia y salen vacíos.</div>
+</main>
+<script>
+const archivo = document.getElementById('archivo');
+const forzar = document.getElementById('forzar');
+const original = document.getElementById('original');
+const todo = document.getElementById('todo');
+const pasos = [...document.querySelectorAll('ol.pasos > li')];
+let imagen = null;
+
+archivo.addEventListener('change', () => {
+  imagen = archivo.files[0] || null;
+  pasos.forEach(li => { li.classList.remove('listo'); li.querySelector('.salida').className = 'salida';
+    li.querySelector('.tiempo').textContent = ''; li.querySelector('button').disabled = !imagen; });
+  todo.disabled = !imagen;
+  if (imagen) { original.src = URL.createObjectURL(imagen); original.style.display = 'block'; }
+  else { original.style.display = 'none'; }
+});
+
+async function ejecutar(li) {
+  const boton = li.querySelector('button'), salida = li.querySelector('.salida'), tiempo = li.querySelector('.tiempo');
+  const texto = boton.textContent;
+  boton.disabled = true; boton.textContent = 'Procesando…';
+  const cuerpo = new FormData();
+  cuerpo.append('imagen', imagen); cuerpo.append('forzar', forzar.checked ? '1' : '0');
+  salida.replaceChildren();
+  try {
+    const r = await fetch('/api/paso/' + li.dataset.paso, { method: 'POST', body: cuerpo });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Error');
+    if (d.imagen) { const im = document.createElement('img'); im.src = d.imagen; im.alt = 'Resultado de ' + li.dataset.paso; salida.append(im); }
+    const pre = document.createElement('pre'); pre.textContent = JSON.stringify(d.datos, null, 2); salida.append(pre);
+    if (d.nota) { const p = document.createElement('p'); p.className = 'nota'; p.textContent = d.nota; salida.append(p); }
+    salida.className = 'salida ver' + (d.imagen ? '' : ' solo');
+    tiempo.textContent = d.ms + ' ms'; li.classList.add('listo');
+  } catch (e) {
+    const p = document.createElement('p'); p.className = 'error'; p.textContent = e.message; salida.append(p);
+    salida.className = 'salida ver solo';
+  }
+  boton.disabled = false; boton.textContent = texto;
+}
+
+pasos.forEach(li => li.querySelector('button').addEventListener('click', () => ejecutar(li)));
+todo.addEventListener('click', async () => { todo.disabled = true; for (const li of pasos) await ejecutar(li); todo.disabled = false; });
+</script>
+</body>
+</html>
