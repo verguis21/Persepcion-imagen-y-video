@@ -479,7 +479,7 @@ def api_detect():
 # Endpoint experimental de Imagen. No altera los endpoints de Video.
 @app.post("/api/imagen/analizar")
 def api_imagen_analizar():
-    from modulo_imagen.features import build_features
+    from modulo_imagen.salida.features import build_features
     raw = (request.files["file"].read() if "file" in request.files
            else request.get_data(cache=False))
     if not raw:

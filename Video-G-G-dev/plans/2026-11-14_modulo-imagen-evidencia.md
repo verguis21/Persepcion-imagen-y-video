@@ -2,6 +2,8 @@
 
 Fecha: 2026-11-14 · Proyecto: detección de accidentes en escaleras universitarias · Subsistema: Imagen · Carpeta de trabajo: `Video-G-G-dev/` (todas las rutas de este plan son relativas a ella).
 
+> **Nota (20/11/2026):** los archivos de Imagen se reorganizaron en carpetas por función. Las rutas y comandos de este plan son los originales; la correspondencia con los nombres actuales está en `ESTRUCTURA_IMAGEN.md`.
+
 ## 1. Planteamiento
 
 El sistema completo tiene cuatro subsistemas: Video, Imagen, Audio y Predicción. Video vigila la escalera en continuo y, cuando ve algo raro (tropiezo, objeto indebido, postura extraña), recorta un **clip de riesgo** de hasta 10 segundos. Imagen recibe ese clip y lo trata como una serie de fotogramas repartidos en el tiempo. Predicción decide.

@@ -7,7 +7,7 @@ Este parche agrega extracción de características ópticas + adaptación de det
 1. Abrir carpeta del proyecto en VS Code.
 2. `py -3.11 -m venv .venv` (si tienes Python 3.11).
 3. ` .\.venv\Scripts\python.exe -m pip install numpy==1.26.4 opencv-python==4.10.0.84 pytest`
-4. ` .\.venv\Scripts\python.exe -m pytest tests/test_modulo_imagen.py -q`
+4. ` .\.venv\Scripts\python.exe -m pytest tests/imagen/test_modulo_imagen.py -q`
 5. Para el servidor también se necesitan las dependencias compatibles con tu CPU/GPU y los modelos `.pt` definidos por el proyecto general. **No instales los paquetes CUDA del requirements general a ciegas en Windows**.
 6. Cuando el servidor esté activo, prueba una imagen en PowerShell:
 
@@ -23,4 +23,4 @@ Comparar manualmente coordenadas de detección, `track_id`, señales pose y cali
 
 ## Evidencia para Predicción
 
-El plan `plans/2026-11-14_modulo-imagen-evidencia.md` define el contrato `imagen-evidencia-1.0`: Imagen entrega evidencia medible, sin porcentajes de riesgo. La ruta `POST /api/imagen/v1/evidencia` recibe el mismo formulario que `/api/imagen/v1/clip` y responde ese JSON. Para verlo sin servidor: `python -m scripts.imagen_demo clip.mp4 --camara <camara_id>`. Para ver cada etapa sobre una foto: `python -m app.pipeline_imagen`.
+El plan `plans/2026-11-14_modulo-imagen-evidencia.md` define el contrato `imagen-evidencia-1.0`: Imagen entrega evidencia medible, sin porcentajes de riesgo. La ruta `POST /api/imagen/v1/evidencia` recibe el mismo formulario que `/api/imagen/v1/clip` y responde ese JSON. Para verlo sin servidor: `python -m scripts.imagen.demo.demo clip.mp4 --camara <camara_id>`. Para ver cada etapa sobre una foto: `python -m app.imagen_web.visor_pipeline`.
